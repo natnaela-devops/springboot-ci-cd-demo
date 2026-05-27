@@ -33,4 +33,4 @@ jobs:
       with:
         context: .
         push: true
-        tags: ${{ secrets.HARBOR_REGISTRY }}/demo/springboot-app:0.0.1
+        tags: ${{ secrets.HARBOR_REGISTRY }}/demo/springboot-app:0.0.2

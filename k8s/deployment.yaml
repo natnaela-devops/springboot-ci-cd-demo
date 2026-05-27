@@ -18,7 +18,7 @@ spec:
       containers:
       - name: springboot-app
         # REPLACE THIS with your actual Harbor registry path and domain/IP
-        image: tyke-wifi-duchess.ngrok-free.dev/demo/springboot-app:0.0.1
+        image: tyke-wifi-duchess.ngrok-free.dev/demo/springboot-app:0.0.2
         ports:
         - containerPort: 8080
         imagePullPolicy: Always
