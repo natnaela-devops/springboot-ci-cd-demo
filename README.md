@@ -1,642 +1,132 @@
-# Spring Boot CI/CD GitOps Pipeline with Harbor, ArgoCD, and K3d
+# Spring Boot GitOps Delivery Lab
 
-A robust local **GitOps CI/CD pipeline** for deploying a Spring Boot application using **GitHub Actions**, **Harbor**, **ArgoCD**, and **K3d**.
+[![Validate](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml/badge.svg)](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml)
 
-This project demonstrates how to securely connect a **local Kubernetes cluster** and a **private container registry** with cloud-hosted automation using **ngrok HTTPS tunneling**.
+A reproducible local lab for building, testing, containerizing, validating, and promoting a Spring Boot service with GitHub Actions, Docker, Kubernetes/K3d, GHCR or Harbor, and Argo CD.
 
----
+This repository demonstrates a delivery pattern; it does not claim that the lab itself runs in production. The application, addresses, credentials, and manifests are safe examples and must be adapted before use in a real environment.
 
-# Architecture Overview
+## What is proven automatically
 
-```text
-┌────────────────────┐
-│ Local Source Code  │
-└─────────┬──────────┘
-          │ git push
-          ▼
-┌────────────────────┐
-│   GitHub Actions   │
-│  Build + Test +    │
-│  Docker Packaging  │
-└─────────┬──────────┘
-          │ docker push
-          ▼
-┌────────────────────┐
-│   Harbor Registry  │
-│ (via ngrok tunnel) │
-└─────────┬──────────┘
-          │ image pull
-          ▼
-┌────────────────────┐
-│      K3d/K3s       │
-│ Kubernetes Cluster │
-└─────────┬──────────┘
-          │ monitored by
-          ▼
-┌────────────────────┐
-│      ArgoCD        │
-│ GitOps Deployment  │
-└────────────────────┘
+Every pull request runs the following gates:
+
+- Maven tests and package verification
+- Dockerfile linting
+- Multi-stage container build
+- Container startup and `/actuator/health` smoke test
+- Kustomize rendering and Kubernetes client-side validation
+
+Pushes to `main` additionally publish immutable commit-SHA and `latest` image tags to GitHub Container Registry using the repository-scoped `GITHUB_TOKEN`. Harbor remains an optional target for local or private-network practice.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Dev[Developer] -->|git push / pull request| GH[GitHub]
+    GH --> CI[GitHub Actions]
+    CI --> Test[Maven tests]
+    CI --> Build[Docker build and smoke test]
+    CI --> Validate[Kubernetes manifest validation]
+    CI -->|main only| GHCR[GHCR image]
+    CI -. optional private runner .-> Harbor[Harbor registry]
+    Argo[Argo CD] -->|watches Git| Manifests[Kustomize manifests]
+    Argo --> K8s[K3d or Kubernetes]
+    K8s -->|pulls approved image| GHCR
+    K8s -. optional .-> Harbor
 ```
 
----
-
-# Workflow Explanation
-
-## 1. Continuous Integration (CI)
-
-When code is pushed to GitHub:
-
-* GitHub Actions:
-
-  * Builds the Spring Boot application using Maven
-  * Runs tests
-  * Creates a Docker image
-  * Pushes the image to Harbor securely through ngrok
-
----
-
-## 2. Continuous Deployment (CD)
-
-ArgoCD continuously monitors the Kubernetes manifests inside the repository.
-
-Once a new image tag is committed:
-
-* ArgoCD detects drift
-* Marks the application as `OutOfSync`
-* Automatically synchronizes the cluster
-* Performs a rolling update deployment
-
----
-
-## 3. Secure Private Registry Access
-
-Kubernetes uses `imagePullSecrets` to authenticate against the private Harbor registry exposed through ngrok.
-
----
-
-# Technology Stack
-
-| Component        | Technology      |
-| ---------------- | --------------- |
-| Backend          | Spring Boot 3.x |
-| Language         | Java 17         |
-| Build Tool       | Maven           |
-| Containerization | Docker          |
-| Registry         | Harbor v2.10    |
-| Kubernetes       | K3d / K3s       |
-| GitOps           | ArgoCD          |
-| CI/CD            | GitHub Actions  |
-| Tunnel           | ngrok           |
-
----
-
-# Project Structure
+## Repository layout
 
 ```text
 .
-├── .github/
-│   └── workflows/
-│       └── ci-cd.yml
+├── .github/workflows/validate.yml
+├── argocd/application.yaml
+├── docs/harbor.md
 ├── k8s/
 │   ├── deployment.yaml
+│   ├── kustomization.yaml
+│   ├── namespace.yaml
+│   ├── networkpolicy.yaml
+│   ├── pdb.yaml
 │   └── service.yaml
 ├── src/
 ├── Dockerfile
-├── pom.xml
-└── README.md
+├── Makefile
+└── pom.xml
 ```
 
----
+## Run locally
 
-# Prerequisites
-
-Before starting, install:
-
-* Docker
-* kubectl
-* k3d
-* ngrok
-* Java 17
-* Maven
-* ArgoCD CLI (optional)
-
----
-
-# Step 1 — Create the K3d Cluster
+Requirements: Java 17, Docker, and kubectl. K3d and Argo CD are optional for the full GitOps exercise.
 
 ```bash
-k3d cluster create local-cluster
+./mvnw verify
+docker build --tag springboot-gitops-demo:local .
+docker run --rm --publish 8080:8080 springboot-gitops-demo:local
 ```
 
-Verify:
+In another terminal:
 
 ```bash
-kubectl get nodes
+curl --fail http://localhost:8080/actuator/health
+curl --fail http://localhost:8080/api/message
 ```
 
----
-
-# Step 2 — Install Harbor
-
-Run Harbor using Docker Compose.
-
-## Download Harbor
+## Validate the Kubernetes manifests
 
 ```bash
-wget https://github.com/goharbor/harbor/releases/download/v2.10.0/harbor-online-installer-v2.10.0.tgz
-
-tar -xvf harbor-online-installer-v2.10.0.tgz
-
-cd harbor
+kubectl kustomize k8s
+kubectl apply --dry-run=client --validate=false --filename <(kubectl kustomize k8s)
 ```
 
----
+The base manifests include:
 
-## Configure Harbor
+- two replicas and a rolling-update strategy
+- readiness, liveness, and startup probes
+- CPU and memory requests/limits
+- non-root execution, dropped Linux capabilities, and a read-only root filesystem
+- a PodDisruptionBudget and a default-deny-oriented NetworkPolicy
+- a ClusterIP service rather than a fixed NodePort
 
-Edit `harbor.yml`:
+## Deploy to K3d
 
-```yaml
-hostname: reg.harbor.com
-
-https:
-  port: 443
-```
-
----
-
-## Start Harbor
+Create a local cluster and import the image:
 
 ```bash
-./prepare
-docker compose up -d
+k3d cluster create gitops-lab --agents 1
+k3d image import springboot-gitops-demo:local --cluster gitops-lab
 ```
 
-Verify:
+For a fully local run, update the image in `k8s/kustomization.yaml` to `springboot-gitops-demo:local`, then apply and verify:
 
 ```bash
-docker ps
+kubectl apply --filename <(kubectl kustomize k8s)
+kubectl rollout status deployment/springboot-app --namespace portfolio-demo --timeout=120s
+kubectl port-forward service/springboot-app 8080:80 --namespace portfolio-demo
 ```
 
----
+## GitOps promotion model
 
-# Step 3 — Expose Harbor with ngrok
+The workflow publishes an image; it does not silently edit deployment manifests. Promotion is an explicit, reviewable Git change:
 
-Since GitHub Actions cannot access localhost directly, expose Harbor using ngrok.
+1. Select a successful immutable image tag.
+2. Update `newTag` in `k8s/kustomization.yaml`.
+3. Open a pull request and pass all validation gates.
+4. Merge the manifest change.
+5. Argo CD detects the Git change and synchronizes it.
 
-Run:
+The example Argo CD Application is in `argocd/application.yaml`. Review its repository URL, revision, destination, and sync policy before applying it.
 
-```bash
-ngrok http https://localhost:443
-```
+## Harbor option
 
-Example output:
+Use [the Harbor integration guide](docs/harbor.md) when practicing with a private registry. A cloud-hosted runner cannot reach a private Harbor instance unless secure network connectivity or a self-hosted runner is deliberately configured. The repository therefore does not advertise a public ngrok tunnel as a production pattern.
 
-```text
-https://abc123.ngrok-free.dev
-```
+## Evidence boundaries
 
-Copy this domain.
+- CI proves source tests, image construction, local container health, and static manifest validity.
+- The Argo CD object demonstrates declarative configuration but does not prove a live cluster sync by itself.
+- Production readiness would additionally require signed images, secret management, TLS, policy enforcement, vulnerability management, registry retention, rollback exercises, and environment-specific capacity testing.
 
----
+## License
 
-# Step 4 — Update Harbor Configuration
-
-Update `harbor.yml`:
-
-```yaml
-hostname: abc123.ngrok-free.dev
-```
-
-Restart Harbor:
-
-```bash
-docker compose down
-rm -rf common/config/
-./prepare
-docker compose up -d
-```
-
----
-
-# Step 5 — Configure GitHub Secrets
-
-Go to:
-
-```text
-GitHub Repository
-→ Settings
-→ Secrets and variables
-→ Actions
-```
-
-Add the following secrets:
-
-| Secret Name     | Description       |
-| --------------- | ----------------- |
-| HARBOR_REGISTRY | Your ngrok domain |
-| DOCKER_USERNAME | Harbor username   |
-| DOCKER_PASSWORD | Harbor password   |
-
-Example:
-
-```text
-HARBOR_REGISTRY=abc123.ngrok-free.dev
-DOCKER_USERNAME=admin
-DOCKER_PASSWORD=your_password
-```
-
----
-
-# Step 6 — Create Dockerfile
-
-Create a `Dockerfile`:
-
-```dockerfile
-FROM eclipse-temurin:17-jdk-alpine
-
-WORKDIR /app
-
-COPY target/*.jar app.jar
-
-EXPOSE 8080
-
-ENTRYPOINT ["java","-jar","app.jar"]
-```
-
----
-
-# Step 7 — GitHub Actions Workflow
-
-Create:
-
-```text
-.github/workflows/ci-cd.yml
-```
-
-```yaml
-name: Spring Boot CI/CD
-
-on:
-  push:
-    branches:
-      - main
-
-env:
-  IMAGE_TAG: 0.0.2
-
-jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v4
-
-      - name: Set Up Java
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: 17
-
-      - name: Build Application
-        run: mvn clean package -DskipTests
-
-      - name: Login to Harbor
-        run: |
-          docker login ${{ secrets.HARBOR_REGISTRY }} \
-            -u ${{ secrets.DOCKER_USERNAME }} \
-            -p ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build Docker Image
-        run: |
-          docker build -t \
-          ${{ secrets.HARBOR_REGISTRY }}/demo/springboot-app:${IMAGE_TAG} .
-
-      - name: Push Docker Image
-        run: |
-          docker push \
-          ${{ secrets.HARBOR_REGISTRY }}/demo/springboot-app:${IMAGE_TAG}
-```
-
----
-
-# Step 8 — Kubernetes Deployment
-
-Create:
-
-```text
-k8s/deployment.yaml
-```
-
-```yaml
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: springboot-app
-spec:
-  replicas: 1
-
-  selector:
-    matchLabels:
-      app: springboot-app
-
-  template:
-    metadata:
-      labels:
-        app: springboot-app
-
-    spec:
-      imagePullSecrets:
-        - name: harbor-registry-secret
-
-      containers:
-        - name: springboot-app
-          image: abc123.ngrok-free.dev/demo/springboot-app:0.0.2
-          imagePullPolicy: Always
-
-          ports:
-            - containerPort: 8080
-```
-
----
-
-# Kubernetes Service
-
-Create:
-
-```text
-k8s/service.yaml
-```
-
-```yaml
-apiVersion: v1
-kind: Service
-
-metadata:
-  name: springboot-service
-
-spec:
-  selector:
-    app: springboot-app
-
-  ports:
-    - protocol: TCP
-      port: 80
-      targetPort: 8080
-
-  type: LoadBalancer
-```
-
----
-
-# 🔑 Step 9 — Create Harbor Pull Secret
-
-```bash
-kubectl create secret docker-registry harbor-registry-secret \
-  --docker-server=abc123.ngrok-free.dev \
-  --docker-username=admin \
-  --docker-password=your_password
-```
-
----
-
-# Step 10 — Install ArgoCD
-
-Create namespace:
-
-```bash
-kubectl create namespace argocd
-```
-
-Install ArgoCD:
-
-```bash
-kubectl apply -n argocd \
--f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-```
-
-Verify:
-
-```bash
-kubectl get pods -n argocd
-```
-
----
-
-# Access ArgoCD UI
-
-Port-forward:
-
-```bash
-kubectl port-forward svc/argocd-server -n argocd 8081:443
-```
-
-Open:
-
-```text
-https://localhost:8081
-```
-
-Get admin password:
-
-```bash
-kubectl -n argocd get secret argocd-initial-admin-secret \
--o jsonpath="{.data.password}" | base64 -d
-```
-
-Username:
-
-```text
-admin
-```
-
----
-
-# Step 11 — Create ArgoCD Application
-
-```bash
-argocd app create springboot-app \
-  --repo https://github.com/YOUR_USERNAME/YOUR_REPO.git \
-  --path k8s \
-  --dest-server https://kubernetes.default.svc \
-  --dest-namespace default
-```
-
-Enable auto-sync:
-
-```bash
-argocd app set springboot-app --sync-policy automated
-```
-
----
-
-# Deployment Flow
-
-## Make a Code Change
-
-Update your Spring Boot application.
-
----
-
-## Bump the Image Version
-
-Update:
-
-* `.github/workflows/ci-cd.yml`
-* `k8s/deployment.yaml`
-
-Example:
-
-```yaml
-IMAGE_TAG: 0.0.3
-```
-
-```yaml
-image: abc123.ngrok-free.dev/demo/springboot-app:0.0.3
-```
-
----
-
-## Commit and Push
-
-```bash
-git add .
-
-git commit -m "feat: update welcome endpoint"
-
-git push origin main
-```
-
----
-
-# Monitoring
-
-## GitHub Actions
-
-Navigate to:
-
-```text
-GitHub → Actions
-```
-
-Monitor:
-
-* Maven build
-* Docker image creation
-* Harbor push
-
----
-
-## ArgoCD
-
-Monitor:
-
-* Sync status
-* Deployment rollout
-* Application health
-
----
-
-# Features
-
-✅ Fully automated CI/CD pipeline
-
-✅ GitOps-driven deployments
-
-✅ Private container registry support
-
-✅ Secure HTTPS tunneling using ngrok
-
-✅ Kubernetes rolling updates
-
-✅ Local-first production-like environment
-
-✅ Lightweight Kubernetes with K3d
-
----
-
-# Useful Commands
-
-## Check Pods
-
-```bash
-kubectl get pods
-```
-
-## Check Services
-
-```bash
-kubectl get svc
-```
-
-## Describe Deployment
-
-```bash
-kubectl describe deployment springboot-app
-```
-
-## View Logs
-
-```bash
-kubectl logs deployment/springboot-app
-```
-
----
-
-# Security Notes
-
-For production environments:
-
-* Use Harbor robot accounts instead of admin credentials
-* Replace ngrok with:
-
-  * VPN
-  * WireGuard
-  * Cloudflare Tunnel
-  * Private networking
-* Enable TLS certificates
-* Use Kubernetes namespaces and RBAC
-* Store secrets using:
-
-  * External Secrets
-  * Vault
-  * Sealed Secrets
-
----
-
-# Future Improvements
-
-* Helm chart support
-* Automatic semantic versioning
-* ArgoCD Image Updater
-* Prometheus + Grafana monitoring
-* Trivy image scanning
-* Multi-environment deployments
-* Blue/Green deployments
-
----
-
-# License
-
-MIT License
-
----
-
-# Acknowledgements
-
-* Kubernetes
-* ArgoCD
-* Harbor
-* K3d
-* ngrok
-* Spring Boot
-
----
-
-# Author
-
-Built for learning modern GitOps CI/CD workflows locally with production-inspired tooling.
-
-Happy GitOps hacking 🚀
+MIT

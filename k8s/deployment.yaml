@@ -2,37 +2,78 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: springboot-app
-  namespace: default
+  namespace: portfolio-demo
+  labels:
+    app.kubernetes.io/name: springboot-app
+    app.kubernetes.io/part-of: springboot-gitops-demo
 spec:
-  replicas: 1
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
-      app: springboot-app
+      app.kubernetes.io/name: springboot-app
   template:
     metadata:
       labels:
-        app: springboot-app
+        app.kubernetes.io/name: springboot-app
+        app.kubernetes.io/part-of: springboot-gitops-demo
     spec:
-      imagePullSecrets:
-      - name: harbor-registry-secret
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
       containers:
-      - name: springboot-app
-        # REPLACE THIS with your actual Harbor registry path and domain/IP
-        image: tyke-wifi-duchess.ngrok-free.dev/demo/springboot-app:0.0.2
-        ports:
-        - containerPort: 8080
-        imagePullPolicy: Always
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: springboot-service
-  namespace: default
-spec:
-  type: NodePort
-  ports:
-  - port: 8080
-    targetPort: 8080
-    nodePort: 30080
-  selector:
-    app: springboot-app
+        - name: application
+          image: ghcr.io/natnaela-devops/springboot-ci-cd-demo:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 2
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 2
+          volumeMounts:
+            - name: temporary-files
+              mountPath: /tmp
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: temporary-files
+          emptyDir: {}

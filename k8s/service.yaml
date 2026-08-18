@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: springboot-app
+  namespace: portfolio-demo
+  labels:
+    app.kubernetes.io/name: springboot-app
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: springboot-app
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+      protocol: TCP

@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - namespace.yaml
+  - deployment.yaml
+  - service.yaml
+  - pdb.yaml
+  - networkpolicy.yaml
+images:
+  - name: ghcr.io/natnaela-devops/springboot-ci-cd-demo
+    newTag: latest
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
