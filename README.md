@@ -75,9 +75,11 @@ curl --fail http://localhost:8080/api/message
 ## Validate the Kubernetes manifests
 
 ```bash
-kubectl kustomize k8s
-kubectl apply --dry-run=client --validate=false --filename <(kubectl kustomize k8s)
+kubectl kustomize k8s > /tmp/rendered.yaml
+docker run --rm --volume /tmp:/manifests:ro ghcr.io/yannh/kubeconform:v0.7.0 -strict -summary /manifests/rendered.yaml
 ```
+
+This validation is cluster-independent: Kubeconform checks the rendered resources against Kubernetes OpenAPI schemas without contacting an API server.
 
 The base manifests include:
 

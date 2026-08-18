@@ -65,7 +65,7 @@ jobs:
         run: kubectl kustomize k8s > /tmp/rendered.yaml
 
       - name: Validate Kubernetes manifests
-        run: kubectl apply --dry-run=client --validate=false --filename /tmp/rendered.yaml
+        run: docker run --rm --volume /tmp:/manifests:ro ghcr.io/yannh/kubeconform:v0.7.0 -strict -summary /manifests/rendered.yaml
 
   publish-ghcr:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
