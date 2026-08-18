@@ -1,0 +1,11 @@
+.git
+.github
+.idea
+.vscode
+argocd
+docs
+k8s
+target
+*.iml
+*.log
+README.md
