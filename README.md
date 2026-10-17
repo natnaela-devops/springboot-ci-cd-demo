@@ -2,6 +2,10 @@
 
 [![Validate](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml/badge.svg)](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml)
 
+A reproducible local lab for building, testing, containerizing, validating, and promoting a Spring Boot service with GitHub Actions, Docker, Kubernetes/K3d, GHCR or Harbor, and Argo CD.
+
+This repository demonstrates a delivery pattern; it does not claim that the lab itself runs in production. The application, addresses, credentials, and manifests are safe examples and must be adapted before use in a real environment.
+
 ## CI verification and reproducibility
 
 **Latest verified successful `main` run at the time of this documentation update:** [GitHub Actions run #32141210529](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/runs/32141210529) (2026-08-18). The live [Validate workflow](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml) and badge above show subsequent runs and their current status; the linked historical run is evidence of a specific successful execution, not a guarantee of future success.
@@ -15,10 +19,6 @@
 ```
 
 Inspect the workflow source in [`.github/workflows/validate.yml`](.github/workflows/validate.yml) for the complete set of commands and runner dependencies. A green badge is not a substitute for reviewing the job output or testing in the intended deployment environment.
-
-A reproducible local lab for building, testing, containerizing, validating, and promoting a Spring Boot service with GitHub Actions, Docker, Kubernetes/K3d, GHCR or Harbor, and Argo CD.
-
-This repository demonstrates a delivery pattern; it does not claim that the lab itself runs in production. The application, addresses, credentials, and manifests are safe examples and must be adapted before use in a real environment.
 
 ## What is proven automatically
 
