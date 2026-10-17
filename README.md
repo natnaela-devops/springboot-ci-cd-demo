@@ -2,9 +2,9 @@
 
 [![Validate](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml/badge.svg)](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml)
 
-A reproducible local lab for building, testing, containerizing, validating, and promoting a Spring Boot service with GitHub Actions, Docker, Kubernetes/K3d, GHCR or Harbor, and Argo CD.
+I built this lab to follow one application change from source code to a container image and a GitOps deployment revision. GitHub Actions tests the Spring Boot app, builds and smoke-tests its image, and checks the Kubernetes manifests before an image is published.
 
-This repository demonstrates a delivery pattern; it does not claim that the lab itself runs in production. The application, addresses, credentials, and manifests are safe examples and must be adapted before use in a real environment.
+The Argo CD and k3d steps are local exercises, not evidence of a production deployment.
 
 ## CI verification and reproducibility
 
@@ -20,7 +20,7 @@ This repository demonstrates a delivery pattern; it does not claim that the lab 
 
 Inspect the workflow source in [`.github/workflows/validate.yml`](.github/workflows/validate.yml) for the complete set of commands and runner dependencies. A green badge is not a substitute for reviewing the job output or testing in the intended deployment environment.
 
-## What is proven automatically
+## CI checks
 
 Every pull request runs the following gates:
 
