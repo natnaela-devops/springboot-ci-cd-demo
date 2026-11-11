@@ -8,9 +8,7 @@ The Argo CD and k3d steps are local exercises, not evidence of a production depl
 
 ## CI verification and reproducibility
 
-**Latest verified successful `main` run at the time of this documentation update:** [GitHub Actions run #32141210529](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/runs/32141210529) (2026-08-18). The live [Validate workflow](https://github.com/natnaela-devops/springboot-ci-cd-demo/actions/workflows/validate.yml) and badge above show subsequent runs and their current status; the linked historical run is evidence of a specific successful execution, not a guarantee of future success.
-
-**What this run validates:** The workflow verifies Maven tests, Dockerfile linting, container build/startup with an Actuator health smoke test, Kustomize rendering, schema validation, and the `main`-branch image publication job. **A successful CI run does not demonstrate Argo CD synchronization in a live Kubernetes cluster.**
+**What the workflow validates:** The workflow verifies Maven tests, Dockerfile linting, container build/startup with an Actuator health smoke test, Kustomize rendering, schema validation, and the `main`-branch image publication job. **A successful CI run does not demonstrate Argo CD synchronization in a live Kubernetes cluster.**
 
 **Reproduce locally:**
 
@@ -145,4 +143,4 @@ Use [the Harbor integration guide](docs/harbor.md) when practicing with a privat
 
 ## License
 
-MIT
+[MIT](LICENSE)
